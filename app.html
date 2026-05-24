@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>英単語テストメーカー</title>
+    <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1, h2, h3, h4 {
+            color: #2c3e50;
+        }
+
+        button {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .btn-main { background-color: var(--primary-color); color: white; }
+        .btn-success { background-color: #2ecc71; color: white; }
+        .btn-danger { background-color: #e74c3c; color: white; }
+        .btn-secondary { background-color: #95a5a6; color: white; }
+        .btn-small { padding: 4px 8px; font-size: 12px; margin-right: 5px; }
+
+        .screen { display: none; }
+        .screen.active { display: block; }
+
+        /* ホーム画面 */
+        .book-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .book-card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            cursor: pointer;
+            border-left: 8px solid var(--primary-color);
+            position: relative;
+        }
+
+        .btn-delete-book {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #e74c3c;
+            color: white;
+            padding: 3px 8px;
+            font-size: 11px;
+            border-radius: 3px;
+        }
+
+        /* ゴミ箱エリア */
+        .trash-section {
+            margin-top: 50px;
+            background: #f0f2f5;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px dashed #ccc;
+        }
+
+        .trash-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            padding: 10px 15px;
+            margin-top: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        /* 各種フォーム・設定 */
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"], input[type="number"], select {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .flex-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* 単語一覧テーブル */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+
+        th { background-color: #f2f2f2; }
+
+        .highlight {
+            color: red;
+            font-weight: bold;
+        }
+
+        /* モーダル */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .modal.active { display: flex; }
+
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .preview-box {
+            border: 1px solid #ccc;
+            padding: 15px;
+            background: #fafafa;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <div id="home-screen" class="screen active">
+        <h1>英単語テストメーカー</h1>
+        <button class="btn-main" onclick="showScreen('new-book-screen')">＋ 単語帳の新規登録</button>
+        
+        <div class="book-grid" id="book-list"></div>
+
+        <div class="trash-section">
+            <h3>原履歴（ゴミ箱）</h3>
+            <p style="font-size: 13px; color: #666; margin: 0;">誤って削除した単語帳はここから復元できます。</p>
+            <div id="trash-list"></div>
+        </div>
+    </div>
+
+    <div id="new-book-screen" class="screen">
+        <h2>単語帳の新規登録</h2>
+        <div class="form-group">
+            <label>単語帳名</label>
+            <input type="text" id="new-book-name" placeholder="例: ターゲット1900">
+        </div>
+        <div class="form-group">
+            <label>単語帳の色</label>
+            <input type="color" id="new-book-color" value="#4a90e2" style="width:100px; height:40px;">
+        </div>
+        <button class="btn-success" onclick="createBook()">登録</button>
+        <button class="btn-secondary" onclick="showScreen('home-screen')">キャンセル</button>
+    </div>
+
+    <div id="book-detail-screen" class="screen">
+        <button class="btn-secondary" onclick="showScreen('home-screen')">← ホームへ戻る</button>
+        <h2 id="current-book-title">単語帳名</h2>
+        
+        <hr>
+
+        <h3>① 単語テスト作成</h3>
+        <div class="form-group">
+            <label>出題形式</label>
+            <select id="test-format">
+                <option value="en-ja">英単語 → 回答欄（日本語）</option>
+                <option value="ja-en">日本語 → 回答欄（英単語）</option>
+                <option value="sentence">英文 → 回答欄（日本語訳）</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>出題範囲（単語ナンバー指定）</label>
+            <div class="flex-group">
+                <input type="number" id="test-range-start" placeholder="開始" value="1">
+                <span>～</span>
+                <input type="number" id="test-range-end" placeholder="終了">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>品詞指定（任意）</label>
+            <select id="test-part-of-speech">
+                <option value="all">すべて</option>
+                <option value="名詞">名詞</option>
+                <option value="動詞">動詞</option>
+                <option value="形容詞">形容詞</option>
+                <option value="副詞">副詞</option>
+                <option value="その他">その他</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>出題する単語数</label>
+            <input type="number" id="test-count" value="20">
+        </div>
+        <button class="btn-main" onclick="prepareTest()">テスト作成確認</button>
+
+        <hr>
+
+        <h3>② 登録英単語の管理</h3>
+        <button class="btn-secondary" id="toggle-word-manager-btn" onclick="toggleWordManager()">登録英単語変更を表示する</button>
+
+        <div id="word-manager-section" style="display: none; margin-top: 20px;">
+            <h4 id="form-title">新規単語登録</h4>
+            <p style="font-size:12px; color:#666; margin-top:-5px; margin-bottom:10px;">※不規則変化は「<b>eat (ate)</b>」や「<b>go (went, gone)</b>」のように丸括弧で囲って入力してください。一覧表やテストには自動で原型のみが表示されます。</p>
+            
+            <input type="hidden" id="editing-word-id">
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:10px;">
+                <input type="number" id="word-num" placeholder="単語ナンバー">
+                <input type="text" id="word-en" placeholder="英単語 例: eat (ate)">
+                <input type="text" id="word-ja" placeholder="日本語意味">
+            </div>
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap:10px; margin-bottom:10px;">
+                <input type="text" id="word-sentence" placeholder="例文 (該当の英単語を含めてください)">
+                <select id="word-pos">
+                    <option value="名詞">名詞</option>
+                    <option value="動詞">動詞</option>
+                    <option value="形容詞">形容詞</option>
+                    <option value="副詞">副詞</option>
+                    <option value="その他">その他</option>
+                </select>
+            </div>
+            <div id="form-buttons">
+                <button class="btn-success" id="btn-word-submit" onclick="addOrUpdateWord()">単語を追加</button>
+                <button class="btn-secondary" id="btn-word-cancel" style="display:none;" onclick="cancelEdit()">編集キャンセル</button>
+            </div>
+
+            <table id="word-table">
+                <thead>
+                    <tr>
+                        <th>ナンバー</th>
+                        <th>英単語</th>
+                        <th>日本語意味</th>
+                        <th>品詞</th>
+                        <th>例文</th>
+                        <th style="width: 140px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="word-table-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="preview-modal" class="modal">
+    <div class="modal-content">
+        <h3>テスト作成例の確認</h3>
+        <p>以下の内容でWordファイルを生成します。よろしいですか？</p>
+        <div class="preview-box" id="test-preview-area"></div>
+        <button class="btn-success" onclick="generateWordDocument()">実行（ダウンロード）</button>
+        <button class="btn-secondary" onclick="closeModal()">キャンセル</button>
+    </div>
+</div>
+
+<script>
+    // --- 初期データ ---
+    let books = JSON.parse(localStorage.getItem('vocab_books')) || [
+        {
+            id: 1,
+            name: "基本英単語 100",
+            color: "#4a90e2",
+            updatedAt: "2026/05/24",
+            words: [
+                { id: "init_1", num: 1, en: "eat (ate)", ja: "食べる", pos: "動詞", sentence: "I ate an apple yesterday at home." },
+                { id: "init_2", num: 2, en: "go (went, gone)", ja: "行く", pos: "動詞", sentence: "She went to school by bus." },
+                { id: "init_3", num: 3, en: "apple", ja: "りんご", pos: "名詞", sentence: "I like fresh apples." }
+            ]
+        }
+    ];
+
+    let trashBooks = JSON.parse(localStorage.getItem('vocab_books_trash')) || [];
+    let currentBookId = null;
+    let generatedQuestions = []; 
+
+    function showScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(screenId).classList.add('active');
+        if(screenId === 'home-screen') {
+            renderBooks();
+            renderTrash();
+        }
+    }
+
+    function parseWordsInput(rawWordInput) {
+        if (!rawWordInput) return [];
+        let result = [];
+        let bracketMatch = rawWordInput.match(/\(([^)]+)\)/);
+        if (bracketMatch) {
+            let insideBrackets = bracketMatch[1];
+            result = insideBrackets.split(',').map(w => w.trim());
+        }
+        let baseWord = rawWordInput.replace(/\([^)]+\)/g, '').trim();
+        if (baseWord) {
+            result.unshift(baseWord);
+        }
+        return result.filter(w => w.length > 0);
+    }
+
+    function getDisplayWord(rawWordInput) {
+        if (!rawWordInput) return '';
+        return rawWordInput.replace(/\([^)]+\)/g, '').trim();
+    }
+
+    function getInflectionRegex(rawWordInput) {
+        let words = parseWordsInput(rawWordInput);
+        let patterns = [];
+
+        words.forEach(word => {
+            let escapedWord = word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            patterns.push(`\\b${escapedWord}(s|es|ed|d|ing)?\\b`);
+            patterns.push(`\\b${escapedWord.slice(0, -1)}${escapedWord.slice(-1)}{2}(ed|ing)\\b`);
+            if (word.endsWith('y')) {
+                let stem = escapedWord.slice(0, -1);
+                patterns.push(`\\b${stem}i(es|ed)\\b`);
+            }
+        });
+        
+        return new RegExp(`(${patterns.join('|')})`, 'gi');
+    }
+
+    function highlightSentence(sentence, rawWordInput) {
+        if (!sentence || !rawWordInput) return '';
+        const regex = getInflectionRegex(rawWordInput);
+        return sentence.replace(regex, '<span class="highlight">$1</span>');
+    }
+
+    // --- ホーム画面処理 ---
+    function renderBooks() {
+        const list = document.getElementById('book-list');
+        list.innerHTML = '';
+        books.forEach(book => {
+            const card = document.createElement('div');
+            card.className = 'book-card';
+            card.style.borderLeftColor = book.color;
+            card.innerHTML = `
+                <h3>${book.name}</h3>
+                <p>収録語数: ${book.words.length}語</p>
+                <p><small>更新日: ${book.updatedAt}</small></p>
+                <button class="btn-delete-book" onclick="deleteBook(event, ${book.id})">削除</button>
+            `;
+            card.onclick = () => openBook(book.id);
+            list.appendChild(card);
+        });
+    }
+
+    function renderTrash() {
+        const trashList = document.getElementById('trash-list');
+        trashList.innerHTML = '';
+        if (trashBooks.length === 0) {
+            trashList.innerHTML = '<p style="color:#999; font-size:13px; margin-top:10px;">ゴミ箱は空です</p>';
+            return;
+        }
+        trashBooks.forEach(book => {
+            const item = document.createElement('div');
+            item.className = 'trash-item';
+            item.innerHTML = `
+                <span><strong>${book.name}</strong> (${book.words.length}語収録)</span>
+                <button class="btn-success btn-small" onclick="restoreBook(${book.id})">復元する</button>
+            `;
+            trashList.appendChild(item);
+        });
+    }
+
+    function createBook() {
+        const name = document.getElementById('new-book-name').value;
+        const color = document.getElementById('new-book-color').value;
+        if(!name) return alert('単語帳名を入力してください');
+
+        const today = new Date().toLocaleDateString('ja-JP');
+        const newBook = { id: Date.now(), name, color, updatedAt: today, words: [] };
+
+        books.push(newBook);
+        saveData();
+        document.getElementById('new-book-name').value = '';
+        showScreen('home-screen');
+    }
+
+    function deleteBook(event, bookId) {
+        event.stopPropagation(); 
+        if(!confirm('この単語帳を削除してもよろしいですか？（ゴミ箱から復元可能です）')) return;
+        const targetBook = books.find(b => b.id === bookId);
+        if(targetBook) {
+            trashBooks.push(targetBook);
+            books = books.filter(b => b.id !== bookId);
+            saveData();
+            renderBooks();
+            renderTrash();
+        }
+    }
+
+    function restoreBook(bookId) {
+        const targetBook = trashBooks.find(b => b.id === bookId);
+        if(targetBook) {
+            books.push(targetBook);
+            trashBooks = trashBooks.filter(b => b.id !== bookId);
+            saveData();
+            renderBooks();
+            renderTrash();
+            alert(`「${targetBook.name}」を復元しました！`);
+        }
+    }
+
+    // --- 各単語帳画面処理 ---
+    function openBook(id) {
+        currentBookId = id;
+        const book = books.find(b => b.id === id);
+        if(!book) return showScreen('home-screen');
+
+        document.getElementById('current-book-title').textContent = book.name;
+        document.getElementById('test-range-start').value = 1;
+        const maxNum = book.words.length > 0 ? Math.max(...book.words.map(w => w.num)) : 10;
+        document.getElementById('test-range-end').value = maxNum;
+
+        document.getElementById('word-manager-section').style.display = 'none';
+        document.getElementById('toggle-word-manager-btn').textContent = "登録英単語変更を表示する";
+
+        cancelEdit(); 
+        renderWords();
+        showScreen('book-detail-screen');
+    }
+
+    function toggleWordManager() {
+        const sec = document.getElementById('word-manager-section');
+        const btn = document.getElementById('toggle-word-manager-btn');
+        sec.style.display = (sec.style.display === 'none') ? 'block' : 'none';
+        btn.textContent = (sec.style.display === 'none') ? "登録英単語変更を表示する" : "登録英単語変更を非表示にする";
+    }
+
+    function renderWords() {
+        const book = books.find(b => b.id === currentBookId);
+        const tbody = document.getElementById('word-table-body');
+        tbody.innerHTML = '';
+        if(!book) return;
+
+        book.words.sort((a,b) => a.num - b.num).forEach(w => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${w.num}</td>
+                <td><b>${getDisplayWord(w.en)}</b></td>
+                <td>${w.ja}</td>
+                <td>${w.pos}</td>
+                <td>${highlightSentence(w.sentence, w.en)}</td>
+                <td>
+                    <button class="btn-main btn-small" onclick="startEditWord('${w.id}')">編集</button>
+                    <button class="btn-danger btn-small" onclick="deleteWord('${w.id}')">削除</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function addOrUpdateWord() {
+        const book = books.find(b => b.id === currentBookId);
+        const num = parseInt(document.getElementById('word-num').value);
+        const en = document.getElementById('word-en').value.trim();
+        const ja = document.getElementById('word-ja').value.trim();
+        const sentence = document.getElementById('word-sentence').value.trim();
+        const pos = document.getElementById('word-pos').value;
+        const editingId = document.getElementById('editing-word-id').value;
+
+        if(!num || !en || !ja) return alert('ナンバー、英単語、日本語意味は必須です');
+
+        if (editingId) {
+            const wordIndex = book.words.findIndex(w => String(w.id) === String(editingId));
+            if (wordIndex !== -1) {
+                book.words[wordIndex] = { id: editingId, num, en, ja, pos, sentence };
+            }
+            cancelEdit(); 
+        } else {
+            book.words.push({ id: "w_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5), num, en, ja, pos, sentence });
+            document.getElementById('word-num').value = num + 1;
+        }
+
+        book.updatedAt = new Date().toLocaleDateString('ja-JP');
+        saveData();
+        renderWords();
+
+        document.getElementById('word-en').value = '';
+        document.getElementById('word-ja').value = '';
+        document.getElementById('word-sentence').value = '';
+    }
+
+    function startEditWord(wordId) {
+        const book = books.find(b => b.id === currentBookId);
+        const word = book.words.find(w => String(w.id) === String(wordId));
+        if(!word) return alert('データが見つかりません');
+
+        document.getElementById('editing-word-id').value = word.id;
+        document.getElementById('word-num').value = word.num;
+        document.getElementById('word-en').value = word.en;
+        document.getElementById('word-ja').value = word.ja;
+        document.getElementById('word-sentence').value = word.sentence;
+        document.getElementById('word-pos').value = word.pos;
+
+        document.getElementById('form-title').textContent = "登録単語の変更";
+        document.getElementById('btn-word-submit').textContent = "変更を保存";
+        document.getElementById('btn-word-submit').className = "btn-main";
+        document.getElementById('btn-word-cancel').style.display = "inline-block";
+        document.getElementById('form-title').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function cancelEdit() {
+        document.getElementById('editing-word-id').value = "";
+        document.getElementById('form-title').textContent = "新規単語登録";
+        document.getElementById('btn-word-submit').textContent = "単語を追加";
+        document.getElementById('btn-word-submit').className = "btn-success";
+        document.getElementById('btn-word-cancel').style.display = "none";
+
+        const book = books.find(b => b.id === currentBookId);
+        const maxNum = (book && book.words.length > 0) ? Math.max(...book.words.map(w => w.num)) : 0;
+        document.getElementById('word-num').value = maxNum + 1;
+        document.getElementById('word-en').value = '';
+        document.getElementById('word-ja').value = '';
+        document.getElementById('word-sentence').value = '';
+    }
+
+    function deleteWord(wordId) {
+        if(!confirm('この単語を削除してもよろしいですか？')) return;
+        const book = books.find(b => b.id === currentBookId);
+        const targetIndex = book.words.findIndex(w => String(w.id) === String(wordId));
+        
+        if (targetIndex !== -1) {
+            book.words.splice(targetIndex, 1);
+            book.updatedAt = new Date().toLocaleDateString('ja-JP');
+            saveData();
+            renderWords();
+        }
+        if(String(document.getElementById('editing-word-id').value) === String(wordId)) cancelEdit();
+    }
+
+    // --- テスト作成・プレビュー処理 ---
+    function prepareTest() {
+        const book = books.find(b => b.id === currentBookId);
+        if(!book || book.words.length === 0) return alert('単語が登録されていません');
+
+        const format = document.getElementById('test-format').value;
+        const start = parseInt(document.getElementById('test-range-start').value) || 1;
+        const end = parseInt(document.getElementById('test-range-end').value) || 9999;
+        const pos = document.getElementById('test-part-of-speech').value;
+        
+        // 【修正ポイント】画面の入力欄から直接「指定された出題数」を読み込みます
+        const count = parseInt(document.getElementById('test-count').value) || 20;
+
+        let filtered = book.words.filter(w => w.num >= start && w.num <= end);
+        if(pos !== 'all') filtered = filtered.filter(w => w.pos === pos);
+
+        if(filtered.length === 0) return alert('該当する単語が見つかりませんでした。');
+
+        filtered.sort(() => Math.random() - 0.5);
+        generatedQuestions = filtered.slice(0, count);
+
+        const previewArea = document.getElementById('test-preview-area');
+        previewArea.innerHTML = `<strong>【形式】</strong> ${format}<br><strong>【問題数】</strong> ${generatedQuestions.length}問<hr>`;
+        
+        let isTwoColumn = (format !== 'sentence' && generatedQuestions.length > 20);
+        let containerStyle = isTwoColumn ? 'display:grid; grid-template-columns:1fr 1fr; gap:20px;' : '';
+        
+        previewArea.innerHTML += `<div style="${containerStyle}" id="preview-grid-root"></div>`;
+        const gridRoot = previewArea.querySelector('#preview-grid-root');
+
+        generatedQuestions.forEach((q, index) => {
+            let displayWord = getDisplayWord(q.en);
+            let itemHtml = '';
+
+            if (format === 'sentence') {
+                itemHtml = `<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; font-size:14px; border-bottom:1px dashed #eee; padding-bottom:4px;">
+                    <div style="width:73%; text-align:left;">${index + 1}. No.${q.num}. ${highlightSentence(q.sentence, q.en)}</div>
+                    <div style="width:27%; background:#eee; height:20px; border-radius:2px; text-align:center; font-size:10px; color:#aaa;">(解答スペース)</div>
+                </div>`;
+            } else {
+                let questionLabel = (format === 'en-ja') ? displayWord : q.ja;
+                itemHtml = `<div style="display:flex; justify-content:space-between; margin-bottom:10px; font-size:14px; border-bottom:1px dashed #eee; padding-bottom:2px;">
+                    <span>${index + 1}. ${questionLabel} <small style="color:#888; font-size:10px;">(No.${q.num})</small></span>
+                    <span style="color:#aaa; font-size:11px;">(解答スペース)</span>
+                </div>`;
+            }
+            
+            if (isTwoColumn) {
+                gridRoot.innerHTML += `<div>${itemHtml}</div>`;
+            } else {
+                gridRoot.innerHTML += itemHtml;
+            }
+        });
+
+        document.getElementById('preview-modal').classList.add('active');
+    }
+
+    function closeModal() {
+        document.getElementById('preview-modal').classList.remove('active');
+    }
+
+    // --- Wordファイル自動レイアウト生成ロジック ---
+    function generateWordDocument() {
+        try {
+            const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } = docx;
+
+            const format = document.getElementById('test-format').value;
+            const book = books.find(b => b.id === currentBookId);
+            const totalQuestions = generatedQuestions.length;
+
+            const noBorders = {
+                top: { style: "none", size: 0, color: "auto" },
+                bottom: { style: "none", size: 0, color: "auto" },
+                left: { style: "none", size: 0, color: "auto" },
+                right: { style: "none", size: 0, color: "auto" }
+            };
+
+            // 全体幅 45 ＝ 8550 dxa（A4印刷可能安全基準）
+            const totalDxaWidth = 8550;
+
+            // ① ヘッダーテーブル：境界線「29」
+            const headerTable = new Table({
+                width: { size: totalDxaWidth, type: WidthType.DXA },
+                borders: noBorders,
+                rows: [
+                    new TableRow({
+                        children: [
+                            new TableCell({
+                                width: { size: 5510, type: WidthType.DXA },
+                                children: [new Paragraph({ children: [new TextRun({ text: `${book.name}`, bold: true, size: 28 })] })]
+                            }),
+                            new TableCell({
+                                width: { size: 3040, type: WidthType.DXA },
+                                children: [
+                                    new Paragraph({ 
+                                        children: [new TextRun({ text: "Name. ___________________", size: 24 })],
+                                        alignment: "right"
+                                    })
+                                ]
+                            })
+                        ]
+                    })
+                ]
+            });
+
+            const documentChildren = [
+                headerTable,
+                new Paragraph({ spacing: { after: 360 } })
+            ];
+
+            // ==========================================
+            // パターンA: 例文記述問題（sentence）境界線「33」、アンダーラインなし
+            // ==========================================
+            if (format === 'sentence') {
+                const sentenceRows = [];
+
+                generatedQuestions.forEach((q, index) => {
+                    const sentenceChildren = [
+                        new TextRun({ text: `${index + 1}.  `, size: 22, bold: true }),
+                        new TextRun({ text: `${q.num}. `, size: 22 })
+                    ];
+
+                    const regex = getInflectionRegex(q.en);
+                    let lastIndex = 0;
+                    let match;
+                    regex.lastIndex = 0;
+
+                    if (q.sentence) {
+                        while ((match = regex.exec(q.sentence)) !== null) {
+                            const beforeText = q.sentence.substring(lastIndex, match.index);
+                            if (beforeText) {
+                                sentenceChildren.push(new TextRun({ text: beforeText, size: 22 }));
+                            }
+                            sentenceChildren.push(new TextRun({ text: match[0], color: "FF0000", bold: true, size: 22 }));
+                            lastIndex = regex.lastIndex;
+                        }
+                        const afterText = q.sentence.substring(lastIndex);
+                        if (afterText) {
+                            sentenceChildren.push(new TextRun({ text: afterText, size: 22 }));
+                        }
+                    } else {
+                        sentenceChildren.push(new TextRun({ text: "(例文が未登録です)", size: 22 }));
+                    }
+
+                    sentenceRows.push(
+                        new TableRow({
+                            children: [
+                                new TableCell({
+                                    width: { size: 6270, type: WidthType.DXA }, // 境界線33
+                                    children: [new Paragraph({ children: sentenceChildren, spacing: { before: 140, after: 140, line: 360 } })],
+                                    verticalAlignment: "center"
+                                }),
+                                new TableCell({
+                                    width: { size: 2280, type: WidthType.DXA }, // 解答スペース12
+                                    children: [new Paragraph({ children: [], spacing: { before: 140, after: 140 } })],
+                                    verticalAlignment: "center"
+                                })
+                            ]
+                        })
+                    );
+                });
+
+                const sentenceTable = new Table({
+                    width: { size: totalDxaWidth, type: WidthType.DXA },
+                    borders: noBorders,
+                    rows: sentenceRows
+                });
+                documentChildren.push(sentenceTable);
+
+            // ==========================================
+            // パターンB: 単語単体問題（en-ja / ja-en）の場合
+            // ==========================================
+            } else {
+                const tableRows = [];
+
+                // 1段組（20問以下）: 境界線「33 : 12」
+                if (totalQuestions <= 20) {
+                    generatedQuestions.forEach((q, index) => {
+                        let displayWord = getDisplayWord(q.en);
+                        let questionLabel = (format === 'en-ja') ? displayWord : q.ja;
+
+                        tableRows.push(
+                            new TableRow({
+                                children: [
+                                    new TableCell({
+                                        width: { size: 6270, type: WidthType.DXA }, // 境界線33
+                                        children: [
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({ text: `${index + 1}. `, size: 24, bold: true }),
+                                                    new TextRun({ text: questionLabel, size: 24 }),
+                                                    new TextRun({ text: `  (No.${q.num})`, color: "888888", size: 16 })
+                                                ],
+                                                spacing: { before: 140, after: 140 }
+                                            })
+                                        ]
+                                    }),
+                                    new TableCell({
+                                        width: { size: 2280, type: WidthType.DXA }, // 解答スペース12
+                                        children: [new Paragraph({ children: [], spacing: { before: 140, after: 140 } })]
+                                    })
+                                ]
+                            })
+                        );
+                    });
+
+                    const singleColumnTable = new Table({
+                        width: { size: totalDxaWidth, type: WidthType.DXA },
+                        borders: noBorders,
+                        rows: tableRows
+                    });
+                    documentChildren.push(singleColumnTable);
+
+                // 2段組（21問以上）: 左右それぞれ「33 : 12」を綺麗に配置
+                } else {
+                    const half = Math.ceil(totalQuestions / 2);
+
+                    for (let i = 0; i < half; i++) {
+                        const qLeft = generatedQuestions[i];
+                        let leftWord = getDisplayWord(qLeft.en);
+                        let leftLabel = (format === 'en-ja') ? leftWord : qLeft.ja;
+
+                        const qRight = generatedQuestions[i + half];
+                        let rightLabel = "";
+                        let rightNo = "";
+                        if (qRight) {
+                            let rightWord = getDisplayWord(qRight.en);
+                            rightLabel = (format === 'en-ja') ? rightWord : qRight.ja;
+                            rightNo = `  (No.${qRight.num})`;
+                        }
+
+                        tableRows.push(
+                            new TableRow({
+                                children: [
+                                    new TableCell({
+                                        width: { size: 3135, type: WidthType.DXA }, // 左側問題
+                                        children: [
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({ text: `${i + 1}. `, size: 22, bold: true }),
+                                                    new TextRun({ text: leftLabel, size: 22 }),
+                                                    new TextRun({ text: `  (No.${qLeft.num})`, color: "888888", size: 14 })
+                                                ],
+                                                spacing: { before: 100, after: 100 }
+                                            })
+                                        ]
+                                    }),
+                                    new TableCell({
+                                        width: { size: 1140, type: WidthType.DXA }, // 左側解答
+                                        children: [new Paragraph({ children: [], spacing: { before: 100, after: 100 } })]
+                                    }),
+                                    new TableCell({
+                                        width: { size: 150, type: WidthType.DXA }, // 段間の隙間
+                                        children: [new Paragraph({ text: "" })]
+                                    }),
+                                    new TableCell({
+                                        width: { size: 3135, type: WidthType.DXA }, // 右側問題
+                                        children: [
+                                            new Paragraph({
+                                                children: qRight ? [
+                                                    new TextRun({ text: `${i + 1 + half}. `, size: 22, bold: true }),
+                                                    new TextRun({ text: rightLabel, size: 22 }),
+                                                    new TextRun({ text: rightNo, color: "888888", size: 14 })
+                                                ] : [],
+                                                spacing: { before: 100, after: 100 }
+                                            })
+                                        ]
+                                    }),
+                                    new TableCell({
+                                        width: { size: 1140, type: WidthType.DXA }, // 右側解答
+                                        children: [new Paragraph({ children: [], spacing: { before: 100, after: 100 } })]
+                                    })
+                                ]
+                            })
+                        );
+                    }
+
+                    const dualColumnTable = new Table({
+                        width: { size: totalDxaWidth, type: WidthType.DXA },
+                        borders: noBorders,
+                        rows: tableRows
+                    });
+                    documentChildren.push(dualColumnTable);
+                }
+            }
+
+            const doc = new Document({ 
+                sections: [{ properties: {}, children: documentChildren }] 
+            });
+
+            Packer.toBlob(doc).then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${book.name}_単語テスト.docx`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+                closeModal();
+            }).catch(err => {
+                alert("ファイルの生成に失敗しました: " + err.message);
+            });
+
+        } catch (globalError) {
+            alert("システムエラーが発生しました: " + globalError.message);
+        }
+    }
+
+    function saveData() {
+        localStorage.setItem('vocab_books', JSON.stringify(books));
+        localStorage.setItem('vocab_books_trash', JSON.stringify(trashBooks));
+    }
+
+    renderBooks();
+    renderTrash();
+</script>
+</body>
+</html>
