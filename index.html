@@ -175,6 +175,15 @@
             background: #fafafa;
             margin-bottom: 15px;
         }
+
+        /* バックアップセクションのスタイル */
+        .backup-section {
+            background: #eef5fc;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #d0e3f7;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
@@ -183,6 +192,17 @@
 
     <div id="home-screen" class="screen active">
         <h1>英単語テストメーカー</h1>
+        
+        <div class="backup-section">
+            <h4 style="margin-top:0; margin-bottom:8px; color:#2c3e50;">データの引越し・バックアップ</h4>
+            <p style="font-size:12px; color:#666; margin-top:0; margin-bottom:10px;">
+                他のPC・スマホへデータを移したい時や、保存用にファイルを書き出せます。
+            </p>
+            <button class="btn-main btn-small" onclick="exportData()">データをファイルに保存</button>
+            <button class="btn-success btn-small" onclick="document.getElementById('import-file-input').click()">ファイルからデータを復元</button>
+            <input type="file" id="import-file-input" style="display:none;" accept=".json" onchange="importData(event)">
+        </div>
+
         <button class="btn-main" onclick="showScreen('new-book-screen')">＋ 単語帳の新規登録</button>
         
         <div class="book-grid" id="book-list"></div>
@@ -378,6 +398,47 @@
         return sentence.replace(regex, '<span class="highlight">$1</span>');
     }
 
+    // --- 【新機能】データの書き出し（エクスポート） ---
+    function exportData() {
+        const dataStr = JSON.stringify({ books, trashBooks }, null, 2);
+        const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+        
+        const exportFileDefaultName = 'vocab_test_maker_backup.json';
+        
+        const linkElement = document.createElement('a');
+        linkElement.setAttribute('href', dataUri);
+        linkElement.setAttribute('download', exportFileDefaultName);
+        linkElement.click();
+    }
+
+    // --- 【新機能】データの読み込み（インポート） ---
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                if (importedData.books && importedData.trashBooks) {
+                    if (confirm('ファイルからデータを復元しますか？（現在登録されているデータは上書きされます）')) {
+                        books = importedData.books;
+                        trashBooks = importedData.trashBooks;
+                        saveData();
+                        renderBooks();
+                        renderTrash();
+                        alert('データを正常に復元しました！');
+                    }
+                } else {
+                    alert('正しいバックアップファイルではありません。');
+                }
+            } catch (err) {
+                alert('ファイルの読み込みに失敗しました: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    }
+
     // --- ホーム画面処理 ---
     function renderBooks() {
         const list = document.getElementById('book-list');
@@ -534,6 +595,7 @@
         document.getElementById('word-sentence').value = '';
     }
 
+    // --- 省略されていたその他の関数群も完全に保持 ---
     function startEditWord(wordId) {
         const book = books.find(b => b.id === currentBookId);
         const word = book.words.find(w => String(w.id) === String(wordId));
@@ -582,7 +644,6 @@
         if(String(document.getElementById('editing-word-id').value) === String(wordId)) cancelEdit();
     }
 
-    // --- テスト作成・プレビュー処理 ---
     function prepareTest() {
         const book = books.find(b => b.id === currentBookId);
         if(!book || book.words.length === 0) return alert('単語が登録されていません');
@@ -591,8 +652,6 @@
         const start = parseInt(document.getElementById('test-range-start').value) || 1;
         const end = parseInt(document.getElementById('test-range-end').value) || 9999;
         const pos = document.getElementById('test-part-of-speech').value;
-        
-        // 【修正ポイント】画面の入力欄から直接「指定された出題数」を読み込みます
         const count = parseInt(document.getElementById('test-count').value) || 20;
 
         let filtered = book.words.filter(w => w.num >= start && w.num <= end);
@@ -643,7 +702,6 @@
         document.getElementById('preview-modal').classList.remove('active');
     }
 
-    // --- Wordファイル自動レイアウト生成ロジック ---
     function generateWordDocument() {
         try {
             const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } = docx;
@@ -659,10 +717,8 @@
                 right: { style: "none", size: 0, color: "auto" }
             };
 
-            // 全体幅 45 ＝ 8550 dxa（A4印刷可能安全基準）
             const totalDxaWidth = 8550;
 
-            // ① ヘッダーテーブル：境界線「29」
             const headerTable = new Table({
                 width: { size: totalDxaWidth, type: WidthType.DXA },
                 borders: noBorders,
@@ -692,12 +748,8 @@
                 new Paragraph({ spacing: { after: 360 } })
             ];
 
-            // ==========================================
-            // パターンA: 例文記述問題（sentence）境界線「33」、アンダーラインなし
-            // ==========================================
             if (format === 'sentence') {
                 const sentenceRows = [];
-
                 generatedQuestions.forEach((q, index) => {
                     const sentenceChildren = [
                         new TextRun({ text: `${index + 1}.  `, size: 22, bold: true }),
@@ -730,12 +782,12 @@
                         new TableRow({
                             children: [
                                 new TableCell({
-                                    width: { size: 6270, type: WidthType.DXA }, // 境界線33
+                                    width: { size: 6270, type: WidthType.DXA },
                                     children: [new Paragraph({ children: sentenceChildren, spacing: { before: 140, after: 140, line: 360 } })],
                                     verticalAlignment: "center"
                                 }),
                                 new TableCell({
-                                    width: { size: 2280, type: WidthType.DXA }, // 解答スペース12
+                                    width: { size: 2280, type: WidthType.DXA },
                                     children: [new Paragraph({ children: [], spacing: { before: 140, after: 140 } })],
                                     verticalAlignment: "center"
                                 })
@@ -751,13 +803,9 @@
                 });
                 documentChildren.push(sentenceTable);
 
-            // ==========================================
-            // パターンB: 単語単体問題（en-ja / ja-en）の場合
-            // ==========================================
             } else {
                 const tableRows = [];
 
-                // 1段組（20問以下）: 境界線「33 : 12」
                 if (totalQuestions <= 20) {
                     generatedQuestions.forEach((q, index) => {
                         let displayWord = getDisplayWord(q.en);
@@ -767,7 +815,7 @@
                             new TableRow({
                                 children: [
                                     new TableCell({
-                                        width: { size: 6270, type: WidthType.DXA }, // 境界線33
+                                        width: { size: 6270, type: WidthType.DXA },
                                         children: [
                                             new Paragraph({
                                                 children: [
@@ -780,7 +828,7 @@
                                         ]
                                     }),
                                     new TableCell({
-                                        width: { size: 2280, type: WidthType.DXA }, // 解答スペース12
+                                        width: { size: 2280, type: WidthType.DXA },
                                         children: [new Paragraph({ children: [], spacing: { before: 140, after: 140 } })]
                                     })
                                 ]
@@ -795,7 +843,6 @@
                     });
                     documentChildren.push(singleColumnTable);
 
-                // 2段組（21問以上）: 左右それぞれ「33 : 12」を綺麗に配置
                 } else {
                     const half = Math.ceil(totalQuestions / 2);
 
@@ -817,7 +864,7 @@
                             new TableRow({
                                 children: [
                                     new TableCell({
-                                        width: { size: 3135, type: WidthType.DXA }, // 左側問題
+                                        width: { size: 3135, type: WidthType.DXA },
                                         children: [
                                             new Paragraph({
                                                 children: [
@@ -830,15 +877,15 @@
                                         ]
                                     }),
                                     new TableCell({
-                                        width: { size: 1140, type: WidthType.DXA }, // 左側解答
+                                        width: { size: 1140, type: WidthType.DXA },
                                         children: [new Paragraph({ children: [], spacing: { before: 100, after: 100 } })]
                                     }),
                                     new TableCell({
-                                        width: { size: 150, type: WidthType.DXA }, // 段間の隙間
+                                        width: { size: 150, type: WidthType.DXA },
                                         children: [new Paragraph({ text: "" })]
                                     }),
                                     new TableCell({
-                                        width: { size: 3135, type: WidthType.DXA }, // 右側問題
+                                        width: { size: 3135, type: WidthType.DXA },
                                         children: [
                                             new Paragraph({
                                                 children: qRight ? [
@@ -851,7 +898,7 @@
                                         ]
                                     }),
                                     new TableCell({
-                                        width: { size: 1140, type: WidthType.DXA }, // 右側解答
+                                        width: { size: 1140, type: WidthType.DXA },
                                         children: [new Paragraph({ children: [], spacing: { before: 100, after: 100 } })]
                                     })
                                 ]
