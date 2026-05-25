@@ -288,6 +288,8 @@
                 💡 <b>Excel画面の使い方:</b><br>
                 ・セルを選択して文字入力を始めるか、ダブルクリックで直接中身を書き換えられます。<br>
                 ・本物のExcelやスプレッドシートの範囲をコピー（`Ctrl+C`）し、この画面に直接貼り付け（`Ctrl+V`）で一括登録が可能です。<br>
+                ・選択したセルの<b>右下にある小さな四角を下にドラッグ（引っ張る）</b>すると、Excel同様に<b>オートフィル機能（連続連番生成）</b>が使えます。<br>
+                ・「1」を入力して下に引っ張るだけで、重複を防ぐ安全機能が働き、自動的に美しい連番（1, 2, 3, 4...）へと自動補正されます！<br>
                 ・行番号の部分を<b>右クリック</b>すると、<b>「行の挿入」「行の削除」</b>が選択できます。<br>
                 ・不規則変化はこれまで通り英単語列に「<b>eat (ate)</b>」のように丸括弧で入力してください。
             </div>
@@ -575,6 +577,57 @@
             contextMenu: ['row_above', 'row_below', 'remove_row'], 
             autoWrapRow: true,
             height: 'auto',
+            fillHandle: true, 
+            
+            // ★【究極の解決策】全データ変更を検知し、ナンバー列に「同じ値の連続」や「数字の重複バグ」が発生していたら強制一発連番化
+            afterChange: function(changes, source) {
+                if (changes && source !== 'programmatic_fix') {
+                    let instance = this;
+                    
+                    setTimeout(() => {
+                        let totalRows = instance.countRows();
+                        let numValues = [];
+                        let hasDuplicateOrPattern = false;
+
+                        // 全行のナンバー列の状態を取得
+                        for (let r = 0; r < totalRows; r++) {
+                            let val = parseFloat(instance.getDataAtCell(r, 0));
+                            numValues.push({ row: r, val: val });
+                        }
+
+                        // 隣り合うセルで同じ数字、または「1, 2, 1, 2」のように重複ループしている異常状態があるかチェック
+                        for (let i = 1; i < numValues.length; i++) {
+                            if (!isNaN(numValues[i].val) && !isNaN(numValues[i-1].val)) {
+                                // 直前と同じ数字、またはさらにその前と同じ数字（ループバグ）なら異常と判定
+                                if (numValues[i].val === numValues[i-1].val) {
+                                    hasDuplicateOrPattern = true;
+                                    break;
+                                }
+                                if (i >= 2 && numValues[i].val === numValues[i-2].val) {
+                                    hasDuplicateOrPattern = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // 異常な連続コピー（Excelのバグ状態）を検知した場合のみ、強制的に上から1ずつ増やす綺麗な連番に修復
+                        if (hasDuplicateOrPattern) {
+                            let fixList = [];
+                            let currentNum = parseFloat(instance.getDataAtCell(0, 0));
+                            if (isNaN(currentNum) || currentNum <= 0) currentNum = 1;
+
+                            for (let r = 0; r < totalRows; r++) {
+                                fixList.push([r, 0, currentNum]);
+                                currentNum++;
+                            }
+
+                            if (fixList.length > 0) {
+                                instance.setDataAtCell(fixList, 'programmatic_fix');
+                            }
+                        }
+                    }, 15);
+                }
+            },
             licenseKey: 'non-commercial-and-evaluation' 
         });
     }
