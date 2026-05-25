@@ -286,7 +286,7 @@
             <div class="spreadsheet-help">
                 💡 <b>Excel画面の使い方:</b><br>
                 ・セルを選択して文字入力を始めるか、ダブルクリックで直接中身を書き換えられます。<br>
-                ・選択したセルの<b>右下にある小さな四角を下にドラッグ（引っ張る）</b>すると、Excel同様に<b>オートフィル機能（連続連番生成）</b>が使えます。<br>
+                ・選択したセルの<b>右下にある小さな四角を下にドラッグ（引っ張る）</b>すると、Excel同様に<b>オートフィル機能（連続连番生成）</b>が使えます。<br>
                 ・1, 2, 3 を選択して引っ張ると自動で計算され「4, 5, 6...」とキレイに連番が作られます。
             </div>
             
@@ -371,8 +371,6 @@
             patterns.push(`\\b${escapedWord}(s|es|ed|d|ing)?\\b`);
             patterns.push(`\\b${escapedWord.slice(0, -1)}${escapedWord.slice(-1)}{2}(ed|ing)\\b`);
             if (word.endsWith('y')) {
-                let stem = escapedWord.slice(0, -1);
-                patterns.push(`\\b${text}i(es|ed)\\b`);
                 let stemEscaped = escapedWord.slice(0, -1);
                 patterns.push(`\\b${stemEscaped}i(es|ed)\\b`);
             }
@@ -639,15 +637,16 @@
 
         const previewArea = document.getElementById('test-preview-area');
         previewArea.innerHTML = `<strong>【形式】</strong> ${format} / <strong>【問題数】</strong> ${generatedQuestions.length}問<hr>`;
-        let isTwoColumn = (format !== 'sentence' && generatedQuestions.length > 20);
-        let containerStyle = isTwoColumn ? 'display:grid; grid-template-columns:1fr 1fr; gap:20px;' : '';
+        
+        // 🛠️ 画面プレビューもシンプルな1列配置に変更
+        let containerStyle = 'display:flex; flex-direction:column; gap:10px;';
         previewArea.innerHTML += `<div style="${containerStyle}" id="preview-grid-root"></div>`;
         const gridRoot = previewArea.querySelector('#preview-grid-root');
+        
         generatedQuestions.forEach((q, index) => {
             let displayWord = getDisplayWord(q.en);
             let itemHtml = '';
             if (format === 'sentence') {
-                // 💡 画面上のプレビューでも、うしろにカッコで単語ナンバーを表示
                 itemHtml = `<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; font-size:14px; border-bottom:1px dashed #eee; padding-bottom:4px;">
                     <div style="width:73%; text-align:left;">${index + 1}. ${highlightSentence(q.sentence, q.en)} <small style="color:#888; font-size:11px;">(No.${q.num})</small></div>
                     <div style="width:27%; background:#eee; height:20px; border-radius:2px;"></div>
@@ -655,7 +654,7 @@
             } else {
                 itemHtml = `<div style="display:flex; justify-content:space-between; margin-bottom:10px; font-size:14px; border-bottom:1px dashed #eee; padding-bottom:2px;"><span>${index + 1}. ${format === 'en-ja' ? displayWord : q.ja} <small style="color:#888; font-size:10px;">(No.${q.num})</small></span><span style="color:#aaa; font-size:11px;">(回答欄)</span></div>`;
             }
-            gridRoot.innerHTML += isTwoColumn ? `<div>${itemHtml}</div>` : itemHtml;
+            gridRoot.innerHTML += itemHtml;
         });
         document.getElementById('preview-modal').classList.add('active');
     }
@@ -667,7 +666,6 @@
             const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, PageBreak } = docx;
             const format = document.getElementById('test-format').value;
             const book = books.find(b => b.id === currentBookId);
-            const totalQuestions = generatedQuestions.length;
 
             const noBorders = {
                 top: { style: "none", size: 0, color: "auto" },
@@ -691,7 +689,6 @@
 
                 if (format === 'sentence') {
                     const rows = generatedQuestions.map((q, index) => {
-                        // 💡 先頭は問題番号のみ
                         const sentenceChildren = [new TextRun({ text: `${index + 1}.  `, size: 22, bold: true })];
                         const regex = getInflectionRegex(q.en);
                         let lastIndex = 0; let match; regex.lastIndex = 0;
@@ -705,49 +702,31 @@
                             }
                             sentenceChildren.push(new TextRun({ text: q.sentence.substring(lastIndex), size: 22 }));
                         } else { 
-                            sentenceChildren.push(new TextRun({ text: "(例文未登録)", size: 22 })); 
+                            sentenceChildren.push(new TextRun({ text: "__________________________________________________", size: 22 })); 
                         }
 
-                        // 💡 英文のうしろにカッコ付きで単語ナンバーを追加
                         sentenceChildren.push(new TextRun({ text: `  (No.${q.num})`, color: "888888", size: 14 }));
 
                         return new TableRow({ children: [
                             new TableCell({ width: { size: 6270, type: WidthType.DXA }, children: [new Paragraph({ children: sentenceChildren, spacing: { before: 140, after: 140, line: 360 } })] }),
-                            new TableCell({ width: { size: 2280, type: WidthType.DXA }, children: [new Paragraph({ children: isAnswerKey ? [new TextRun({ text: q.ja, color: "FF0000", size: 22 })] : [], spacing: { before: 140, after: 140 } })] })
+                            new TableCell({ width: { size: 2280, type: WidthType.DXA }, children: [new Paragraph({ children: isAnswerKey ? [new TextRun({ text: q.ja || "", color: "FF0000", size: 22 })] : [], spacing: { before: 140, after: 140 } })] })
                         ] });
                     });
                     section.push(new Table({ width: { size: totalDxaWidth, type: WidthType.DXA }, borders: noBorders, rows }));
 
                 } else {
-                    const rows = [];
-                    if (totalQuestions <= 20) {
-                        generatedQuestions.forEach((q, index) => {
-                            const answerText = (format === 'en-ja') ? q.ja : getDisplayWord(q.en);
-                            rows.push(new TableRow({ children: [
-                                new TableCell({ width: { size: 6270, type: WidthType.DXA }, children: [new Paragraph({ children: [
-                                    new TextRun({ text: `${index + 1}. `, size: 24, bold: true }),
-                                    new TextRun({ text: (format === 'en-ja' ? getDisplayWord(q.en) : q.ja), size: 24 }),
-                                    new TextRun({ text: `  (No.${q.num})`, color: "888888", size: 16 })
-                                ], spacing: { before: 140, after: 140 } })] }),
-                                new TableCell({ width: { size: 2280, type: WidthType.DXA }, children: [new Paragraph({ children: isAnswerKey ? [new TextRun({ text: answerText, color: "FF0000", size: 22 })] : [], spacing: { before: 140, after: 140 } })] })
-                            ] }));
-                        });
-                    } else {
-                        const half = Math.ceil(totalQuestions / 2);
-                        for (let i = 0; i < half; i++) {
-                            const qL = generatedQuestions[i]; const qR = generatedQuestions[i + half];
-                            const ansL = (format === 'en-ja') ? qL.ja : getDisplayWord(qL.en);
-                            const ansR = qR ? ((format === 'en-ja') ? qR.ja : getDisplayWord(qR.en)) : "";
-                            
-                            rows.push(new TableRow({ children: [
-                                new TableCell({ width: { size: 3135, type: WidthType.DXA }, children: [new Paragraph({ children: [new TextRun({ text: `${i+1}. `, size: 22, bold: true }), new TextRun({ text: (format === 'en-ja' ? getDisplayWord(qL.en) : qL.ja), size: 22 }), new TextRun({ text: `  (No.${qL.num})`, color: "888888", size: 14 })], spacing: { before: 100, after: 100 } })] }),
-                                new TableCell({ width: { size: 1140, type: WidthType.DXA }, children: [new Paragraph({ children: isAnswerKey ? [new TextRun({ text: ansL, color: "FF0000", size: 18 })] : [] })] }),
-                                new TableCell({ width: { size: 150, type: WidthType.DXA }, children: [new Paragraph()] }),
-                                new TableCell({ width: { size: 3135, type: WidthType.DXA }, children: [new Paragraph({ children: qR ? [new TextRun({ text: `${i+1+half}. `, size: 22, bold: true }), new TextRun({ text: (format === 'en-ja' ? getDisplayWord(qR.en) : qR.ja), size: 22 }), new TextRun({ text: `  (No.${qR.num})`, color: "888888", size: 14 })] : [], spacing: { before: 100, after: 100 } })] }),
-                                new TableCell({ width: { size: 1140, type: WidthType.DXA }, children: [new Paragraph({ children: (qR && isAnswerKey) ? [new TextRun({ text: ansR, color: "FF0000", size: 18 })] : [] })] })
-                            ] }));
-                        }
-                    }
+                    // 🛠️ 2段組の複雑な処理を完全に排除！常に安全な1列配置で出力します
+                    const rows = generatedQuestions.map((q, index) => {
+                        const answerText = (format === 'en-ja') ? (q.ja || "") : getDisplayWord(q.en);
+                        return new TableRow({ children: [
+                            new TableCell({ width: { size: 6270, type: WidthType.DXA }, children: [new Paragraph({ children: [
+                                new TextRun({ text: `${index + 1}. `, size: 24, bold: true }),
+                                new TextRun({ text: (format === 'en-ja' ? getDisplayWord(q.en) : (q.ja || "")), size: 24 }),
+                                new TextRun({ text: `  (No.${q.num})`, color: "888888", size: 16 })
+                            ], spacing: { before: 140, after: 140 } })] }),
+                            new TableCell({ width: { size: 2280, type: WidthType.DXA }, children: [new Paragraph({ children: isAnswerKey ? [new TextRun({ text: answerText, color: "FF0000", size: 22 })] : [], spacing: { before: 140, after: 140 } })] })
+                        ] });
+                    });
                     section.push(new Table({ width: { size: totalDxaWidth, type: WidthType.DXA }, borders: noBorders, rows }));
                 }
                 return section;
