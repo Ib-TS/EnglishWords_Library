@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>英単語テストメーカー (Excel安定版)</title>
+    <title>EnglishWords Library</title>
     <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
     
     <script src="https://unpkg.com/handsontable@8.4.0/dist/handsontable.full.min.js"></script>
@@ -167,7 +167,6 @@
             margin-bottom: 20px;
         }
 
-        /* Excel風スプレッドシート（Handsontable）調整 */
         #spreadsheet-container {
             margin-top: 15px;
             background: white;
@@ -204,7 +203,7 @@
 <div class="container">
 
     <div id="home-screen" class="screen active">
-        <h1>英単語テストメーカー</h1>
+        <h1>EnglishWords Library</h1>
         
         <div class="backup-section">
             <h4 style="margin-top:0; margin-bottom:8px; color:#2c3e50;">データのバックアップ・復元</h4>
@@ -287,11 +286,8 @@
             <div class="spreadsheet-help">
                 💡 <b>Excel画面の使い方:</b><br>
                 ・セルを選択して文字入力を始めるか、ダブルクリックで直接中身を書き換えられます。<br>
-                ・本物のExcelやスプレッドシートの範囲をコピー（`Ctrl+C`）し、この画面に直接貼り付け（`Ctrl+V`）で一括登録が可能です。<br>
                 ・選択したセルの<b>右下にある小さな四角を下にドラッグ（引っ張る）</b>すると、Excel同様に<b>オートフィル機能（連続連番生成）</b>が使えます。<br>
-                ・「1」を入力して下に引っ張るだけで、重複を防ぐ安全機能が働き、自動的に美しい連番（1, 2, 3, 4...）へと自動補正されます！<br>
-                ・行番号の部分を<b>右クリック</b>すると、<b>「行の挿入」「行の削除」</b>が選択できます。<br>
-                ・不規則変化はこれまで通り英単語列に「<b>eat (ate)</b>」のように丸括弧で入力してください。
+                ・1, 2, 3 を選択して引っ張ると自動で計算され「4, 5, 6...」とキレイに連番が作られます。
             </div>
             
             <div style="margin-bottom:10px;">
@@ -306,7 +302,7 @@
 <div id="preview-modal" class="modal">
     <div class="modal-content">
         <h3>テスト作成例の確認</h3>
-        <p>以下の内容でWordファイルを生成します。よろしいですか？</p>
+        <p>問題のあとに<b>「解答用紙（赤字の答え付き）」</b>も自動で生成されます。</p>
         <div class="preview-box" id="test-preview-area"></div>
         <button class="btn-success" onclick="generateWordDocument()">実行（ダウンロード）</button>
         <button class="btn-secondary" onclick="closeModal()">キャンセル</button>
@@ -335,7 +331,6 @@
     let generatedQuestions = []; 
     let hotInstance = null; 
 
-    // データ構造の自動安全チェック
     books.forEach(b => { if (!b.words) b.words = []; });
 
     function showScreen(screenId) {
@@ -377,7 +372,9 @@
             patterns.push(`\\b${escapedWord.slice(0, -1)}${escapedWord.slice(-1)}{2}(ed|ing)\\b`);
             if (word.endsWith('y')) {
                 let stem = escapedWord.slice(0, -1);
-                patterns.push(`\\b${stem}i(es|ed)\\b`);
+                patterns.push(`\\b${text}i(es|ed)\\b`);
+                let stemEscaped = escapedWord.slice(0, -1);
+                patterns.push(`\\b${stemEscaped}i(es|ed)\\b`);
             }
         });
         
@@ -391,7 +388,6 @@
         return String(sentence).replace(regex, '<span class="highlight">$1</span>');
     }
 
-    // --- データの書き出し（エクスポート） ---
     function exportData() {
         syncSheetToData(); 
         const dataStr = JSON.stringify({ books, trashBooks }, null, 2);
@@ -402,7 +398,6 @@
         linkElement.click();
     }
 
-    // --- データの読み込み（インポート） ---
     function importData(event) {
         const file = event.target.files[0];
         if (!file) return;
@@ -430,7 +425,6 @@
         reader.readAsText(file);
     }
 
-    // --- ホーム画面処理 ---
     function renderBooks() {
         const list = document.getElementById('book-list');
         list.innerHTML = '';
@@ -505,7 +499,6 @@
         }
     }
 
-    // --- 各単語帳画面処理 ---
     function openBook(id) {
         currentBookId = id;
         const book = books.find(b => b.id === id);
@@ -513,7 +506,6 @@
 
         document.getElementById('current-book-title').textContent = book.name;
         document.getElementById('test-range-start').value = 1;
-        
         const maxNum = (book.words && book.words.length > 0) ? Math.max(...book.words.map(w => w.num)) : 10;
         document.getElementById('test-range-end').value = maxNum;
 
@@ -545,85 +537,53 @@
         }
     }
 
-    // --- Excel風シート構築 (Handsontable) ---
     function buildSpreadsheet(wordsData) {
         const container = document.getElementById('spreadsheet-container');
-        
         if (hotInstance) {
             hotInstance.destroy();
             hotInstance = null;
         }
         container.innerHTML = '';
-
         let sortedWords = [...wordsData].sort((a,b) => (parseInt(a.num) || 0) - (parseInt(b.num) || 0));
         let sheetData = sortedWords.map(w => [w.num, w.en, w.ja, w.pos, w.sentence]);
-
-        if(sheetData.length === 0) {
-            sheetData = [[1, "", "", "名詞", ""]];
-        }
+        if(sheetData.length === 0) sheetData = [[1, "", "", "名詞", ""]];
 
         hotInstance = new Handsontable(container, {
             data: sheetData,
             colHeaders: ['ナンバー', '英単語 例: eat (ate)', '日本語意味', '品詞', '例文 (自動赤色化連動)'],
             colWidths: [80, 200, 220, 100, 480],
-            columns: [
-                { type: 'numeric' },
-                { type: 'text' },
-                { type: 'text' },
-                { type: 'dropdown', source: ['名詞', '動詞', '形容詞', '副詞', 'その他'] },
-                { type: 'text' }
-            ],
+            columns: [{ type: 'numeric' }, { type: 'text' }, { type: 'text' }, { type: 'dropdown', source: ['名詞', '動詞', '形容詞', '副詞', 'その他'] }, { type: 'text' }],
             rowHeaders: true,
             contextMenu: ['row_above', 'row_below', 'remove_row'], 
             autoWrapRow: true,
             height: 'auto',
             fillHandle: true, 
-            
-            // ★【究極の解決策】全データ変更を検知し、ナンバー列に「同じ値の連続」や「数字の重複バグ」が発生していたら強制一発連番化
             afterChange: function(changes, source) {
                 if (changes && source !== 'programmatic_fix') {
                     let instance = this;
-                    
                     setTimeout(() => {
                         let totalRows = instance.countRows();
                         let numValues = [];
                         let hasDuplicateOrPattern = false;
-
-                        // 全行のナンバー列の状態を取得
                         for (let r = 0; r < totalRows; r++) {
                             let val = parseFloat(instance.getDataAtCell(r, 0));
                             numValues.push({ row: r, val: val });
                         }
-
-                        // 隣り合うセルで同じ数字、または「1, 2, 1, 2」のように重複ループしている異常状態があるかチェック
                         for (let i = 1; i < numValues.length; i++) {
                             if (!isNaN(numValues[i].val) && !isNaN(numValues[i-1].val)) {
-                                // 直前と同じ数字、またはさらにその前と同じ数字（ループバグ）なら異常と判定
-                                if (numValues[i].val === numValues[i-1].val) {
-                                    hasDuplicateOrPattern = true;
-                                    break;
-                                }
-                                if (i >= 2 && numValues[i].val === numValues[i-2].val) {
-                                    hasDuplicateOrPattern = true;
-                                    break;
-                                }
+                                if (numValues[i].val === numValues[i-1].val) { hasDuplicateOrPattern = true; break; }
+                                if (i >= 2 && numValues[i].val === numValues[i-2].val) { hasDuplicateOrPattern = true; break; }
                             }
                         }
-
-                        // 異常な連続コピー（Excelのバグ状態）を検知した場合のみ、強制的に上から1ずつ増やす綺麗な連番に修復
                         if (hasDuplicateOrPattern) {
                             let fixList = [];
                             let currentNum = parseFloat(instance.getDataAtCell(0, 0));
                             if (isNaN(currentNum) || currentNum <= 0) currentNum = 1;
-
                             for (let r = 0; r < totalRows; r++) {
                                 fixList.push([r, 0, currentNum]);
                                 currentNum++;
                             }
-
-                            if (fixList.length > 0) {
-                                instance.setDataAtCell(fixList, 'programmatic_fix');
-                            }
+                            if (fixList.length > 0) instance.setDataAtCell(fixList, 'programmatic_fix');
                         }
                     }, 15);
                 }
@@ -632,63 +592,39 @@
         });
     }
 
-    function addNewRowAtEnd() {
-        if (hotInstance) {
-            hotInstance.alter('insert_row');
-        }
-    }
+    function addNewRowAtEnd() { if (hotInstance) hotInstance.alter('insert_row'); }
 
-    // --- シートから内部データへの同期保存 ---
     function syncSheetToData() {
         if (!hotInstance || !currentBookId) return;
         const book = books.find(b => b.id === currentBookId);
         if (!book) return;
-
         try {
             let rawRows = hotInstance.getData();
             let newWords = [];
-
             rawRows.forEach((row, index) => {
                 let num = parseInt(row[0]);
                 let en = row[1] ? String(row[1]).trim() : "";
                 let ja = row[2] ? String(row[2]).trim() : "";
                 let pos = row[3] || "その他";
                 let sentence = row[4] ? String(row[4]).trim() : "";
-
                 if (!row[0] && !en && !ja && !sentence) return;
-
                 if (isNaN(num)) num = index + 1;
-
-                newWords.push({
-                    id: "w_" + Date.now() + "_" + Math.floor(Math.random() * 100000),
-                    num: num,
-                    en: en,
-                    ja: ja,
-                    pos: pos,
-                    sentence: sentence
-                });
+                newWords.push({ id: "w_" + Date.now() + "_" + Math.floor(Math.random() * 100000), num: num, en: en, ja: ja, pos: pos, sentence: sentence });
             });
-
             book.words = newWords;
             book.updatedAt = new Date().toLocaleDateString('ja-JP');
             saveData();
-
             if (newWords.length > 0) {
                 const maxNum = Math.max(...newWords.map(w => w.num));
                 document.getElementById('test-range-end').value = maxNum;
             }
-        } catch (err) {
-            console.error("保存同期エラー:", err);
-        }
+        } catch (err) { console.error("保存同期エラー:", err); }
     }
 
-    // --- テスト作成・プレビュー処理 ---
     function prepareTest() {
         syncSheetToData();
-
         const book = books.find(b => b.id === currentBookId);
         if(!book || !book.words || book.words.length === 0) return alert('単語帳にデータが入力されていません');
-
         const format = document.getElementById('test-format').value;
         const start = parseInt(document.getElementById('test-range-start').value) || 1;
         const end = parseInt(document.getElementById('test-range-end').value) || 9999;
@@ -697,51 +633,38 @@
 
         let filtered = book.words.filter(w => w.num >= start && w.num <= end);
         if(pos !== 'all') filtered = filtered.filter(w => w.pos === pos);
-
         if(filtered.length === 0) return alert('該当する単語が見つかりませんでした。');
-
         filtered.sort(() => Math.random() - 0.5);
         generatedQuestions = filtered.slice(0, count);
 
         const previewArea = document.getElementById('test-preview-area');
         previewArea.innerHTML = `<strong>【形式】</strong> ${format} / <strong>【問題数】</strong> ${generatedQuestions.length}問<hr>`;
-        
         let isTwoColumn = (format !== 'sentence' && generatedQuestions.length > 20);
         let containerStyle = isTwoColumn ? 'display:grid; grid-template-columns:1fr 1fr; gap:20px;' : '';
-        
         previewArea.innerHTML += `<div style="${containerStyle}" id="preview-grid-root"></div>`;
         const gridRoot = previewArea.querySelector('#preview-grid-root');
-
         generatedQuestions.forEach((q, index) => {
             let displayWord = getDisplayWord(q.en);
             let itemHtml = '';
-
             if (format === 'sentence') {
+                // 💡 画面上のプレビューでも、うしろにカッコで単語ナンバーを表示
                 itemHtml = `<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; font-size:14px; border-bottom:1px dashed #eee; padding-bottom:4px;">
-                    <div style="width:73%; text-align:left;">${index + 1}. No.${q.num}. ${highlightSentence(q.sentence, q.en)}</div>
+                    <div style="width:73%; text-align:left;">${index + 1}. ${highlightSentence(q.sentence, q.en)} <small style="color:#888; font-size:11px;">(No.${q.num})</small></div>
                     <div style="width:27%; background:#eee; height:20px; border-radius:2px;"></div>
                 </div>`;
             } else {
-                let questionLabel = (format === 'en-ja') ? displayWord : q.ja;
-                itemHtml = `<div style="display:flex; justify-content:space-between; margin-bottom:10px; font-size:14px; border-bottom:1px dashed #eee; padding-bottom:2px;">
-                    <span>${index + 1}. ${questionLabel} <small style="color:#888; font-size:10px;">(No.${q.num})</small></span>
-                    <span style="color:#aaa; font-size:11px;">(回答欄)</span>
-                </div>`;
+                itemHtml = `<div style="display:flex; justify-content:space-between; margin-bottom:10px; font-size:14px; border-bottom:1px dashed #eee; padding-bottom:2px;"><span>${index + 1}. ${format === 'en-ja' ? displayWord : q.ja} <small style="color:#888; font-size:10px;">(No.${q.num})</small></span><span style="color:#aaa; font-size:11px;">(回答欄)</span></div>`;
             }
             gridRoot.innerHTML += isTwoColumn ? `<div>${itemHtml}</div>` : itemHtml;
         });
-
         document.getElementById('preview-modal').classList.add('active');
     }
 
-    function closeModal() {
-        document.getElementById('preview-modal').classList.remove('active');
-    }
+    function closeModal() { document.getElementById('preview-modal').classList.remove('active'); }
 
-    // --- Wordファイル自動生成ロジック ---
     function generateWordDocument() {
         try {
-            const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } = docx;
+            const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, PageBreak } = docx;
             const format = document.getElementById('test-format').value;
             const book = books.find(b => b.id === currentBookId);
             const totalQuestions = generatedQuestions.length;
@@ -754,150 +677,97 @@
             };
             const totalDxaWidth = 8550;
 
-            const headerTable = new Table({
-                width: { size: totalDxaWidth, type: WidthType.DXA },
-                borders: noBorders,
-                rows: [
-                    new TableRow({
-                        children: [
-                            new TableCell({
-                                width: { size: 5510, type: WidthType.DXA },
-                                children: [new Paragraph({ children: [new TextRun({ text: `${book.name}`, bold: true, size: 28 })] })]
-                            }),
-                            new TableCell({
-                                width: { size: 3040, type: WidthType.DXA },
-                                children: [new Paragraph({ children: [new TextRun({ text: "Name. ___________________", size: 24 })], alignment: "right" })]
-                            })
-                        ]
-                    })
-                ]
-            });
-
-            const documentChildren = [headerTable, new Paragraph({ spacing: { after: 360 } })];
-
-            if (format === 'sentence') {
-                const sentenceRows = [];
-                generatedQuestions.forEach((q, index) => {
-                    const sentenceChildren = [
-                        new TextRun({ text: `${index + 1}.  `, size: 22, bold: true }),
-                        new TextRun({ text: `${q.num}. `, size: 22 })
-                    ];
-
-                    const regex = getInflectionRegex(q.en);
-                    let lastIndex = 0;
-                    let match;
-                    regex.lastIndex = 0;
-
-                    if (q.sentence) {
-                        while ((match = regex.exec(q.sentence)) !== null) {
-                            const beforeText = q.sentence.substring(lastIndex, match.index);
-                            if (beforeText) sentenceChildren.push(new TextRun({ text: beforeText, size: 22 }));
-                            sentenceChildren.push(new TextRun({ text: match[0], color: "FF0000", bold: true, size: 22 }));
-                            lastIndex = regex.lastIndex;
-                        }
-                        const afterText = q.sentence.substring(lastIndex);
-                        if (afterText) sentenceChildren.push(new TextRun({ text: afterText, size: 22 }));
-                    } else {
-                        sentenceChildren.push(new TextRun({ text: "(例文未登録)", size: 22 }));
-                    }
-
-                    sentenceRows.push(new TableRow({
-                        children: [
-                            new TableCell({
-                                width: { size: 6270, type: WidthType.DXA },
-                                children: [new Paragraph({ children: sentenceChildren, spacing: { before: 140, after: 140, line: 360 } })]
-                            }),
-                            new TableCell({
-                                width: { size: 2280, type: WidthType.DXA },
-                                children: [new Paragraph({ spacing: { before: 140, after: 140 } })]
-                            })
-                        ]
-                    }));
+            function createTestSection(titlePrefix, isAnswerKey) {
+                const headerTable = new Table({
+                    width: { size: totalDxaWidth, type: WidthType.DXA },
+                    borders: noBorders,
+                    rows: [new TableRow({ children: [
+                        new TableCell({ width: { size: 5510, type: WidthType.DXA }, children: [new Paragraph({ children: [new TextRun({ text: `${titlePrefix}${book.name}`, bold: true, size: 28 })] })] }),
+                        new TableCell({ width: { size: 3040, type: WidthType.DXA }, children: [new Paragraph({ children: [new TextRun({ text: isAnswerKey ? "(Answer Key)" : "Name. ___________________", size: 24 })], alignment: "right" })] })
+                    ] })]
                 });
-                documentChildren.push(new Table({ width: { size: totalDxaWidth, type: WidthType.DXA }, borders: noBorders, rows: sentenceRows }));
 
-            } else {
-                const tableRows = [];
-                if (totalQuestions <= 20) {
-                    generatedQuestions.forEach((q, index) => {
-                        let displayWord = getDisplayWord(q.en);
-                        let questionLabel = (format === 'en-ja') ? displayWord : q.ja;
-                        tableRows.push(new TableRow({
-                            children: [
-                                new TableCell({
-                                    width: { size: 6270, type: WidthType.DXA },
-                                    children: [new Paragraph({ children: [
-                                        new TextRun({ text: `${index + 1}. `, size: 24, bold: true }),
-                                        new TextRun({ text: questionLabel, size: 24 }),
-                                        new TextRun({ text: `  (No.${q.num})`, color: "888888", size: 16 })
-                                    ], spacing: { before: 140, after: 140 } })]
-                                }),
-                                new TableCell({ width: { size: 2280, type: WidthType.DXA }, children: [new Paragraph({ spacing: { before: 140, after: 140 } })] })
-                            ]
-                        }));
-                    });
-                    documentChildren.push(new Table({ width: { size: totalDxaWidth, type: WidthType.DXA }, borders: noBorders, rows: tableRows }));
-                } else {
-                    const half = Math.ceil(totalQuestions / 2);
-                    for (let i = 0; i < half; i++) {
-                        const qLeft = generatedQuestions[i];
-                        let leftLabel = (format === 'en-ja') ? getDisplayWord(qLeft.en) : qLeft.ja;
+                const section = [headerTable, new Paragraph({ spacing: { after: 360 } })];
 
-                        const qRight = generatedQuestions[i + half];
-                        let rightLabel = "", rightNo = "";
-                        if (qRight) {
-                            rightLabel = (format === 'en-ja') ? getDisplayWord(qRight.en) : qRight.ja;
-                            rightNo = `  (No.${qRight.num})`;
+                if (format === 'sentence') {
+                    const rows = generatedQuestions.map((q, index) => {
+                        // 💡 先頭は問題番号のみ
+                        const sentenceChildren = [new TextRun({ text: `${index + 1}.  `, size: 22, bold: true })];
+                        const regex = getInflectionRegex(q.en);
+                        let lastIndex = 0; let match; regex.lastIndex = 0;
+                        
+                        if (q.sentence) {
+                            while ((match = regex.exec(q.sentence)) !== null) {
+                                const beforeText = q.sentence.substring(lastIndex, match.index);
+                                if (beforeText) sentenceChildren.push(new TextRun({ text: beforeText, size: 22 }));
+                                sentenceChildren.push(new TextRun({ text: match[0], color: "FF0000", bold: true, size: 22 }));
+                                lastIndex = regex.lastIndex;
+                            }
+                            sentenceChildren.push(new TextRun({ text: q.sentence.substring(lastIndex), size: 22 }));
+                        } else { 
+                            sentenceChildren.push(new TextRun({ text: "(例文未登録)", size: 22 })); 
                         }
 
-                        tableRows.push(new TableRow({
-                            children: [
-                                new TableCell({
-                                    width: { size: 3135, type: WidthType.DXA },
-                                    children: [new Paragraph({ children: [
-                                        new TextRun({ text: `${i + 1}. `, size: 22, bold: true }),
-                                        new TextRun({ text: leftLabel, size: 22 }),
-                                        new TextRun({ text: `  (No.${qLeft.num})`, color: "888888", size: 14 })
-                                    ], spacing: { before: 100, after: 100 } })]
-                                }),
-                                new TableCell({ width: { size: 1140, type: WidthType.DXA }, children: [new Paragraph()] }),
+                        // 💡 英文のうしろにカッコ付きで単語ナンバーを追加
+                        sentenceChildren.push(new TextRun({ text: `  (No.${q.num})`, color: "888888", size: 14 }));
+
+                        return new TableRow({ children: [
+                            new TableCell({ width: { size: 6270, type: WidthType.DXA }, children: [new Paragraph({ children: sentenceChildren, spacing: { before: 140, after: 140, line: 360 } })] }),
+                            new TableCell({ width: { size: 2280, type: WidthType.DXA }, children: [new Paragraph({ children: isAnswerKey ? [new TextRun({ text: q.ja, color: "FF0000", size: 22 })] : [], spacing: { before: 140, after: 140 } })] })
+                        ] });
+                    });
+                    section.push(new Table({ width: { size: totalDxaWidth, type: WidthType.DXA }, borders: noBorders, rows }));
+
+                } else {
+                    const rows = [];
+                    if (totalQuestions <= 20) {
+                        generatedQuestions.forEach((q, index) => {
+                            const answerText = (format === 'en-ja') ? q.ja : getDisplayWord(q.en);
+                            rows.push(new TableRow({ children: [
+                                new TableCell({ width: { size: 6270, type: WidthType.DXA }, children: [new Paragraph({ children: [
+                                    new TextRun({ text: `${index + 1}. `, size: 24, bold: true }),
+                                    new TextRun({ text: (format === 'en-ja' ? getDisplayWord(q.en) : q.ja), size: 24 }),
+                                    new TextRun({ text: `  (No.${q.num})`, color: "888888", size: 16 })
+                                ], spacing: { before: 140, after: 140 } })] }),
+                                new TableCell({ width: { size: 2280, type: WidthType.DXA }, children: [new Paragraph({ children: isAnswerKey ? [new TextRun({ text: answerText, color: "FF0000", size: 22 })] : [], spacing: { before: 140, after: 140 } })] })
+                            ] }));
+                        });
+                    } else {
+                        const half = Math.ceil(totalQuestions / 2);
+                        for (let i = 0; i < half; i++) {
+                            const qL = generatedQuestions[i]; const qR = generatedQuestions[i + half];
+                            const ansL = (format === 'en-ja') ? qL.ja : getDisplayWord(qL.en);
+                            const ansR = qR ? ((format === 'en-ja') ? qR.ja : getDisplayWord(qR.en)) : "";
+                            
+                            rows.push(new TableRow({ children: [
+                                new TableCell({ width: { size: 3135, type: WidthType.DXA }, children: [new Paragraph({ children: [new TextRun({ text: `${i+1}. `, size: 22, bold: true }), new TextRun({ text: (format === 'en-ja' ? getDisplayWord(qL.en) : qL.ja), size: 22 }), new TextRun({ text: `  (No.${qL.num})`, color: "888888", size: 14 })], spacing: { before: 100, after: 100 } })] }),
+                                new TableCell({ width: { size: 1140, type: WidthType.DXA }, children: [new Paragraph({ children: isAnswerKey ? [new TextRun({ text: ansL, color: "FF0000", size: 18 })] : [] })] }),
                                 new TableCell({ width: { size: 150, type: WidthType.DXA }, children: [new Paragraph()] }),
-                                new TableCell({
-                                    width: { size: 3135, type: WidthType.DXA },
-                                    children: [new Paragraph({ children: qRight ? [
-                                        new TextRun({ text: `${i + 1 + half}. `, size: 22, bold: true }),
-                                        new TextRun({ text: rightLabel, size: 22 }),
-                                        new TextRun({ text: rightNo, color: "888888", size: 14 })
-                                    ] : [], spacing: { before: 100, after: 100 } })]
-                                }),
-                                new TableCell({ width: { size: 1140, type: WidthType.DXA }, children: [new Paragraph()] })
-                            ]
-                        }));
+                                new TableCell({ width: { size: 3135, type: WidthType.DXA }, children: [new Paragraph({ children: qR ? [new TextRun({ text: `${i+1+half}. `, size: 22, bold: true }), new TextRun({ text: (format === 'en-ja' ? getDisplayWord(qR.en) : qR.ja), size: 22 }), new TextRun({ text: `  (No.${qR.num})`, color: "888888", size: 14 })] : [], spacing: { before: 100, after: 100 } })] }),
+                                new TableCell({ width: { size: 1140, type: WidthType.DXA }, children: [new Paragraph({ children: (qR && isAnswerKey) ? [new TextRun({ text: ansR, color: "FF0000", size: 18 })] : [] })] })
+                            ] }));
+                        }
                     }
-                    documentChildren.push(new Table({ width: { size: totalDxaWidth, type: WidthType.DXA }, borders: noBorders, rows: tableRows }));
+                    section.push(new Table({ width: { size: totalDxaWidth, type: WidthType.DXA }, borders: noBorders, rows }));
                 }
+                return section;
             }
 
-            const doc = new Document({ sections: [{ children: documentChildren }] });
+            const problemSection = createTestSection("", false);
+            problemSection.push(new Paragraph({ children: [new PageBreak()] }));
+            const answerSection = createTestSection("【解答】", true);
+
+            const doc = new Document({ sections: [{ children: [...problemSection, ...answerSection] }] });
             Packer.toBlob(doc).then(blob => {
                 const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${book.name}_単語テスト.docx`;
-                a.click();
-                window.URL.revokeObjectURL(url);
-                closeModal();
+                const a = document.createElement('a'); a.href = url; a.download = `${book.name}_単語テスト(解答付き).docx`;
+                a.click(); window.URL.revokeObjectURL(url); closeModal();
             });
         } catch (e) { alert("Word生成エラー: " + e.message); }
     }
 
-    function saveData() {
-        localStorage.setItem('vocab_books', JSON.stringify(books));
-        localStorage.setItem('vocab_books_trash', JSON.stringify(trashBooks));
-    }
-
-    renderBooks();
-    renderTrash();
+    function saveData() { localStorage.setItem('vocab_books', JSON.stringify(books)); localStorage.setItem('vocab_books_trash', JSON.stringify(trashBooks)); }
+    renderBooks(); renderTrash();
 </script>
 </body>
 </html>
