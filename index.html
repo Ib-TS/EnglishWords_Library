@@ -288,6 +288,7 @@
                 ・セルを選択して文字入力を始めるか、ダブルクリックで直接中身を書き換えられます。<br>
                 ・選択したセルの<b>右下にある小さな四角を下にドラッグ（引っ張る）</b>すると、Excel同様に<b>オートフィル機能（連続連番生成）</b>が使えます。<br>
                 ・右クリックで「行の挿入」「行の削除」が行えます。<br>
+                ・登録する単語の不規則変化形が例文中で使用される際は、英単語登録欄に<b>原形（不規則変化形）</b>で登録してください。<br>
             </div>
             
             <div style="margin-bottom:10px;">
@@ -363,22 +364,30 @@
     }
 
     function getInflectionRegex(rawWordInput) {
-        let words = parseWordsInput(rawWordInput);
-        let patterns = [];
+    let words = parseWordsInput(rawWordInput);
+    let patterns = [];
 
-        words.forEach(word => {
-            let escapedWord = word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-            patterns.push(`\\b${escapedWord}(s|es|ed|d|ing)?\\b`);
-            patterns.push(`\\b${escapedWord.slice(0, -1)}${escapedWord.slice(-1)}{2}(ed|ing)\\b`);
-            if (word.endsWith('y')) {
-                let stemEscaped = escapedWord.slice(0, -1);
-                patterns.push(`\\b${stemEscaped}i(es|ed)\\b`);
-            }
-        });
-        
-        if(patterns.length === 0) return new RegExp('^$');
-        return new RegExp(`(${patterns.join('|')})`, 'gi');
-    }
+    words.forEach(word => {
+        let escapedWord = word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        // 1. 通常の変形（s, es, ed, d, ing）に対応
+        patterns.push(`\\b${escapedWord}(s|es|ed|d|ing)?\\b`);
+        // 2. 子音を重ねる変形（stop → stopped, run → running など）に対応
+        patterns.push(`\\b${escapedWord.slice(0, -1)}${escapedWord.slice(-1)}{2}(ed|ing)\\b`);
+        // 3. 末尾の y を i に変える変形（study → studies など）に対応
+        if (word.endsWith('y')) {
+            let stemEscaped = escapedWord.slice(0, -1);
+            patterns.push(`\\b${stemEscaped}i(es|ed)\\b`);
+        }
+        // ✨【新設】末尾がeのとき、eを消してingにする変形（make → making など）に対応
+        if (word.endsWith('e')) {
+            let stemEscaped = escapedWord.slice(0, -1);
+            patterns.push(`\\b${stemEscaped}ing\\b`);
+        }
+    });
+    
+    if(patterns.length === 0) return new RegExp('^$');
+    return new RegExp(`(${patterns.join('|')})`, 'gi');
+}
 
     function highlightSentence(sentence, rawWordInput) {
         if (!sentence || !rawWordInput) return sentence || '';
